@@ -1557,12 +1557,12 @@
     <div class="group-header">Выбери бутылку</div>
     <div class="inv-search">
       <div class="wo-field">
-        <input class="wo-input" id="inv-bottle-name" placeholder="Название бутылки" autocomplete="off" oninput="invBottleFilter()" onfocus="invBottleFilter()">
+        <input class="wo-input" id="inv-bottle-name" placeholder="Поиск по названию" autocomplete="off" oninput="invBottleFilter()">
         <button class="wo-caret" type="button" onclick="invBottleToggleList()" aria-label="Список"><svg viewBox="0 0 12 8"><path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
       <div class="wo-suggest" id="inv-bottle-suggest"></div>
     </div>
-    <div id="bottle-list" style="display:none;"></div>
+    <div id="bottle-list"></div>
 
     <div id="weight-section" style="display: none;">
       <!-- Переключатель режима -->
@@ -2369,28 +2369,43 @@ function selectBartender(name) {
 
 function renderBottles() {
   var list = document.getElementById('bottle-list');
-  if (list) list.innerHTML = '';
-  var box = document.getElementById('inv-bottle-suggest');
-  if (state.bottles.length === 0 && box) {
-    box.classList.add('show');
-    box.innerHTML = '<div class="wo-empty" style="padding:10px 12px;">Список бутылок пуст — добавь позиции в лист Bottles</div>';
+  if (!list) return;
+  if (!state.bottles || state.bottles.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="title">Список бутылок пуст</div><div class="sub">Добавь позиции в лист Bottles</div></div>';
+    return;
   }
+  list.innerHTML = state.bottles.map(function (b) {
+    var usingFull = b.full_g && b.full_g > b.empty_g;
+    var meta = usingFull
+      ? b.volume_ml + ' мл · пуст. ' + b.empty_g + ' г · полн. ' + b.full_g + ' г · <span class="bottle-density">плотн. ' + b.density + '</span>'
+      : b.volume_ml + ' мл · пустая ' + b.empty_g + ' г · <span class="bottle-density">плотность ' + b.density + '</span>';
+    return '<div class="card" data-id="' + escapeHtml(b.id) + '" data-name="' + escapeHtml((b.name || '').toLowerCase()) + '">' +
+           '<div class="bottle-name">' + escapeHtml(b.name) + '</div>' +
+           '<div class="bottle-meta">' + meta + '</div></div>';
+  }).join('');
+  list.querySelectorAll('.card').forEach(function (card) {
+    card.addEventListener('click', function () { selectBottle(card.dataset.id); });
+  });
 }
 
+// Поиск: сужает список карточек при вводе
 function invBottleFilter() {
   var inp = document.getElementById('inv-bottle-name');
   if (!inp) return;
   var q = (inp.value || '').trim().toLowerCase();
-  var list = q ? state.bottles.filter(function (b) { return (b.name || '').toLowerCase().indexOf(q) !== -1; }) : state.bottles;
-  renderInvSuggest(list);
+  var box = document.getElementById('inv-bottle-suggest');
+  if (box) { box.classList.remove('show'); box.dataset.full = ''; }
+  document.querySelectorAll('#bottle-list .card').forEach(function (c) {
+    c.style.display = (!q || (c.dataset.name || '').indexOf(q) !== -1) ? '' : 'none';
+  });
 }
 
+// Стрелка: выпадающее «колесо» со всеми бутылками
 function invBottleToggleList() {
   var box = document.getElementById('inv-bottle-suggest');
-  if (box && box.classList.contains('show') && box.dataset.full === '1') { box.classList.remove('show'); box.dataset.full = ''; return; }
-  renderInvSuggest(state.bottles);
-  var box2 = document.getElementById('inv-bottle-suggest'); if (box2) box2.dataset.full = '1';
-  var inp = document.getElementById('inv-bottle-name'); if (inp) inp.focus();
+  if (box && box.classList.contains('show')) { box.classList.remove('show'); box.dataset.full = ''; return; }
+  renderInvSuggest(state.bottles || []);
+  if (box) box.dataset.full = '1';
 }
 
 function renderInvSuggest(list) {
@@ -2404,10 +2419,9 @@ function renderInvSuggest(list) {
 }
 
 function invBottlePick(id) {
-  var b = state.bottles.filter(function (x) { return x.id === id; })[0];
-  var inp = document.getElementById('inv-bottle-name');
-  if (inp && b) inp.value = b.name;
+  var inp = document.getElementById('inv-bottle-name'); if (inp) inp.value = '';
   var box = document.getElementById('inv-bottle-suggest'); if (box) { box.classList.remove('show'); box.dataset.full = ''; }
+  document.querySelectorAll('#bottle-list .card').forEach(function (c) { c.style.display = ''; });
   selectBottle(id);
 }
 
